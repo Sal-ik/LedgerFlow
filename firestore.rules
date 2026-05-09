@@ -1,0 +1,116 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidTransaction(data) {
+      let baseKeys = ['userId', 'type', 'category', 'description', 'amount', 'date', 'isRecurring', 'frequency'];
+      let optionalKeys = ['createdAt', 'updatedAt', 'excludedDates', 'fundedBySavings', 'savingsCap', 'fundedByAssetId', 'linkedAssetId', 'endDate', 'dayOfMonth', 'dayOfWeek', 'id'];
+      
+      return data.userId == request.auth.uid 
+        && data.type in ['income', 'expense']
+        && data.amount is number && data.amount > 0
+        && data.category is string && data.category.size() <= 100
+        && data.description is string && data.description.size() <= 1000
+        && data.date is string
+        && data.isRecurring is bool
+        && (data.frequency in ['none', 'daily', 'weekly', 'monthly', 'yearly'])
+        && data.keys().hasAll(baseKeys)
+        && data.keys().size() >= 8 && data.keys().size() <= 19
+        && (!('excludedDates' in data) || data.excludedDates is list)
+        && (!('fundedBySavings' in data) || data.fundedBySavings is bool)
+        && (!('savingsCap' in data) || (data.savingsCap == null || (data.savingsCap is number && data.savingsCap >= 0)))
+        && (!('fundedByAssetId' in data) || (data.fundedByAssetId == null || (data.fundedByAssetId is string && data.fundedByAssetId.size() <= 128)))
+        && (!('linkedAssetId' in data) || (data.linkedAssetId == null || (data.linkedAssetId is string && data.linkedAssetId.size() <= 128)))
+        && (!('endDate' in data) || (data.endDate == null || data.endDate is string))
+        && (!('dayOfMonth' in data) || (data.dayOfMonth == null || (data.dayOfMonth is number && data.dayOfMonth >= 1 && data.dayOfMonth <= 31)))
+        && (!('dayOfWeek' in data) || (data.dayOfWeek == null || (data.dayOfWeek is number && data.dayOfWeek >= 0 && data.dayOfWeek <= 6)));
+    }
+
+    function isValidStrategy(data) {
+      return data.userId == request.auth.uid
+        && data.name is string && data.name.size() <= 100
+        && (!('calculationType' in data) || data.calculationType == null || data.calculationType in ['percentage', 'fixed', 'sweep'])
+        && (!('percentage' in data) || data.percentage == null || (data.percentage is number && data.percentage >= 0 && data.percentage <= 100))
+        && (!('fixedAmount' in data) || data.fixedAmount == null || (data.fixedAmount is number && data.fixedAmount >= 0))
+        && (!('leaveAmount' in data) || data.leaveAmount == null || (data.leaveAmount is number && data.leaveAmount >= 0))
+        && data.frequency in ['none', 'daily', 'weekly', 'monthly', 'yearly']
+        && data.dayOfMonth is number && data.dayOfMonth >= 1 && data.dayOfMonth <= 31
+        && (!('dayOfWeek' in data) || data.dayOfWeek == null || (data.dayOfWeek is number && data.dayOfWeek >= 0 && data.dayOfWeek <= 6))
+        && (!('minAmount' in data) || data.minAmount == null || (data.minAmount is number && data.minAmount >= 0))
+        && (!('maxAmount' in data) || data.maxAmount == null || (data.maxAmount is number && data.maxAmount >= 0))
+        && data.isActive is bool
+        && data.keys().hasAll(['userId', 'name', 'frequency', 'dayOfMonth', 'isActive']);
+    }
+
+    function isValidAsset(data) {
+      let hasCreatedAt = 'createdAt' in data;
+      let hasUpdatedAt = 'updatedAt' in data;
+      let hasLinkedTransactionIds = 'linkedTransactionIds' in data;
+      let hasId = 'id' in data;
+      let expectedSize = 7 + (hasCreatedAt ? 1 : 0) + (hasUpdatedAt ? 1 : 0) + (hasLinkedTransactionIds ? 1 : 0) + (hasId ? 1 : 0);
+
+      return data.userId == request.auth.uid
+        && data.name is string && data.name.size() <= 100
+        && data.type in ['receivable', 'payable', 'asset', 'liability']
+        && data.totalAmount is number && data.totalAmount >= 0
+        && data.currentBalance is number
+        && data.description is string && data.description.size() <= 1000
+        && data.isActive is bool
+        && (!hasLinkedTransactionIds || data.linkedTransactionIds is list)
+        && data.keys().hasAll(['userId', 'name', 'type', 'totalAmount', 'currentBalance', 'description', 'isActive'])
+        && data.keys().size() == expectedSize;
+    }
+
+    match /transactions/{transactionId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidTransaction(request.resource.data) && isValidId(transactionId);
+      allow update: if isSignedIn() && resource.data.userId == request.auth.uid 
+        && request.resource.data.userId == resource.data.userId
+        && (!('createdAt' in resource.data) || request.resource.data.createdAt == resource.data.createdAt)
+        && (
+          (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['excludedDates', 'updatedAt']) && (!('excludedDates' in request.resource.data) || request.resource.data.excludedDates is list)) ||
+          isValidTransaction(request.resource.data)
+        );
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    match /assets/{assetId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidAsset(request.resource.data) && isValidId(assetId);
+      allow update: if isSignedIn() && resource.data.userId == request.auth.uid 
+        && isValidAsset(request.resource.data)
+        && request.resource.data.userId == resource.data.userId;
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    match /savings_strategies/{strategyId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidStrategy(request.resource.data) && isValidId(strategyId);
+      allow update: if isSignedIn() && resource.data.userId == request.auth.uid 
+        && isValidStrategy(request.resource.data)
+        && request.resource.data.userId == resource.data.userId;
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+
+
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow write: if isOwner(userId);
+    }
+  }
+}

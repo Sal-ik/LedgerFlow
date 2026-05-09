@@ -1,0 +1,102 @@
+{
+  "entities": {
+    "Transaction": {
+      "title": "Transaction",
+      "description": "A financial entry (receivable or payable).",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "type": { "enum": ["income", "expense"] },
+        "category": { "type": "string" },
+        "amount": { "type": "number" },
+        "description": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "isRecurring": { "type": "boolean" },
+        "frequency": { "enum": ["none", "daily", "weekly", "monthly", "yearly"] },
+        "dayOfMonth": { "type": "number" },
+        "dayOfWeek": { "type": "number" },
+        "fundedBySavings": { "type": "boolean" },
+        "savingsCap": { "type": "number" },
+        "fundedByAssetId": { "type": "string" },
+        "linkedAssetId": { "type": "string" },
+        "endDate": { "type": "string", "format": "date-time" },
+        "excludedDates": { "type": "array", "items": { "type": "string", "format": "date-time" } },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "type", "amount", "date"]
+    },
+    "AssetLiability": {
+      "title": "Asset/Liability",
+      "description": "Unscheduled loans, receivables, payables or non-liquid assets.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "enum": ["receivable", "payable", "asset", "liability"] },
+        "totalAmount": { "type": "number" },
+        "currentBalance": { "type": "number" },
+        "description": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "linkedTransactionIds": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "name", "type", "totalAmount", "currentBalance"]
+    },
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "User specific settings and summaries.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "email": { "type": "string" },
+        "currency": { "type": "string" },
+        "onboarded": { "type": "boolean" }
+      },
+      "required": ["userId"]
+    },
+    "SavingsStrategy": {
+      "title": "Savings Strategy",
+      "description": "Rules for automated monthly savings transfers.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "calculationType": { "enum": ["percentage", "fixed", "sweep"] },
+        "percentage": { "type": "number" },
+        "fixedAmount": { "type": "number" },
+        "leaveAmount": { "type": "number" },
+        "frequency": { "enum": ["none", "daily", "weekly", "monthly", "yearly"] },
+        "dayOfMonth": { "type": "number" },
+        "dayOfWeek": { "type": "number" },
+        "minAmount": { "type": "number" },
+        "maxAmount": { "type": "number" },
+        "isActive": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "name", "isActive"]
+    }
+  },
+  "firestore": {
+    "/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "Collection of all user transactions."
+    },
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Individual user profiles and settings."
+    },
+    "/savings_strategies/{strategyId}": {
+      "schema": "SavingsStrategy",
+      "description": "User's savings automation rules."
+    },
+    "/assets/{assetId}": {
+      "schema": "AssetLiability",
+      "description": "Collection of unscheduled loans, assets and liabilities."
+    }
+  }
+}

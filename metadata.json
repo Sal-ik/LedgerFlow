@@ -1,0 +1,6 @@
+{
+  "name": "LedgerFlow",
+  "description": "A luxury personal finance forecaster and ledger manager with PWA support.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
